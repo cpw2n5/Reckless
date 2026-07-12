@@ -1214,12 +1214,16 @@ fn qsearch<NODE: NodeType>(td: &mut ThreadData, mut alpha: i32, beta: i32, ply: 
     let hash = td.board.hash();
     let entry = td.shared.tt.read(hash, td.board.fiftymove_clock(), ply);
 
+    let mut tt_move = Move::NULL;
     let mut tt_score = Score::NONE;
     let mut tt_bound = Bound::None;
     let mut tt_pv = NODE::PV;
 
     // QS early TT cutoff
     if let Some(entry) = &entry {
+        if entry.mv.is_noisy() || in_check {
+            tt_move = entry.mv;
+        }
         tt_score = entry.score;
         tt_bound = entry.bound;
         tt_pv |= entry.tt_pv;
@@ -1287,7 +1291,7 @@ fn qsearch<NODE: NodeType>(td: &mut ThreadData, mut alpha: i32, beta: i32, ply: 
     let mut best_move = Move::NULL;
 
     let mut move_count = 0;
-    let mut move_picker = MovePicker::new(Move::NULL, None);
+    let mut move_picker = MovePicker::new(tt_move, None);
 
     let skip_quiets = |best_score| !in_check || !is_loss(best_score);
 
