@@ -1447,6 +1447,20 @@ fn make_move(td: &mut ThreadData, ply: isize, mv: Move) {
     td.board.make_move(mv, &mut td.nnue);
 
     td.shared.tt.prefetch(td.board.hash());
+
+    // The child node reads five randomly indexed correction history entries spread over
+    // ~17 MB of tables, so the loads reliably miss cache. Their addresses are known here.
+    let stm = td.board.side_to_move();
+    let bucket = td.board.fiftymove_clock_bucket();
+    let corrhist = td.corrhist();
+
+    corrhist.pawn.prefetch(stm, td.board.pawn_key(), bucket);
+    corrhist.non_pawn[Color::White].prefetch(stm, td.board.non_pawn_key(Color::White), bucket);
+    corrhist.non_pawn[Color::Black].prefetch(stm, td.board.non_pawn_key(Color::Black), bucket);
+
+    let piece = td.stack[ply].piece;
+    td.continuation_corrhist.prefetch(td.stack[ply - 1].contcorrhist, piece, mv.to());
+    td.continuation_corrhist.prefetch(td.stack[ply - 3].contcorrhist, piece, mv.to());
 }
 
 fn undo_move(td: &mut ThreadData, mv: Move) {

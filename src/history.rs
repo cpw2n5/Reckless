@@ -74,6 +74,19 @@ impl<T> Drop for HugeBox<T> {
     }
 }
 
+fn prefetch_line<T>(ptr: *const T) {
+    #[cfg(target_arch = "x86_64")]
+    unsafe {
+        use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
+
+        _mm_prefetch::<_MM_HINT_T0>(ptr.cast());
+    }
+
+    // No prefetching for non-x86_64 architectures
+    #[cfg(not(target_arch = "x86_64"))]
+    let _ = ptr;
+}
+
 fn apply_bonus<const MAX: i32>(entry: &mut i16, bonus: i32) {
     let bonus = bonus.clamp(-MAX, MAX);
     *entry += (bonus - bonus.abs() * (*entry) as i32 / MAX) as i16;
@@ -171,6 +184,10 @@ impl CorrectionHistory {
         self.entries[bucket][stm][key as usize & Self::MASK].load(Ordering::Relaxed) as i32
     }
 
+    pub fn prefetch(&self, stm: Color, key: u64, bucket: usize) {
+        prefetch_line(&raw const self.entries[bucket][stm][key as usize & Self::MASK]);
+    }
+
     pub fn update(&self, stm: Color, key: u64, bucket: usize, bonus: i32) {
         let current = self.entries[bucket][stm][key as usize & Self::MASK].load(Ordering::Relaxed) as i32;
         let new = current + bonus - bonus.abs() * current / Self::MAX_HISTORY;
@@ -210,6 +227,11 @@ impl ContinuationCorrectionHistory {
 
     pub fn get(&self, subtable_ptr: *mut PieceToHistory<i16>, piece: Piece, to: Square) -> i32 {
         unsafe { (&*subtable_ptr)[piece][to] as i32 }
+    }
+
+    pub fn prefetch(&self, subtable_ptr: *mut PieceToHistory<i16>, piece: Piece, to: Square) {
+        let subtable = unsafe { &*subtable_ptr };
+        prefetch_line(&raw const subtable[piece][to]);
     }
 
     pub fn update(&self, subtable_ptr: *mut PieceToHistory<i16>, piece: Piece, to: Square, bonus: i32) {
